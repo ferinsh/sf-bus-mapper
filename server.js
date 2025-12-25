@@ -22,6 +22,7 @@ async function loadDatabase() {
     const insertTrip = db.prepare("INSERT INTO trips VALUES (?, ?)");
     const insertStopTime = db.prepare("INSERT INTO stop_times VALUES (?, ?, ?)");
     const insertStop = db.prepare("INSERT INTO stops VALUES (?, ?, ?, ?)");
+    const insertShapes = db.prepare("INSERT INTO shapes VALUES (?, ?, ?, ?)");
 
     console.log("Checking Database");
 
@@ -78,36 +79,91 @@ async function loadDatabase() {
     })
     db.exec("COMMIT");
     console.log("Stops Loaded");
+
+    console.log("Loading Shapes");
+    db.exec("BEGIN");
+    await loadCSV("data/gtfs/shapes.txt", row => {
+        insertShapes.run(
+            row.shape_id,
+            row.shape_pt_lat,
+            row.shape_pt_lon,
+            row.shape_pt_sequence
+        );
+    });
+    db.exec("COMMIT");
+    console.log("Shapes Loaded");
     console.log("Database Ready");
 }
+
+function buildGraph() {
+  const rows = db.prepare(`
+    SELECT
+      t.route_id,
+      st.trip_id,
+      st.stop_id,
+      st.stop_sequence
+    FROM stop_times st
+    JOIN trips t ON st.trip_id = t.trip_id
+    ORDER BY st.trip_id, st.stop_sequence
+  `).all();
+
+  const graph = {};
+  const stopRoutes = {};
+
+  for (let i = 0; i < rows.length - 1; i++) {
+    const a = rows[i];
+    const b = rows[i + 1];
+
+    if (a.trip_id !== b.trip_id) continue;
+
+    if (!graph[a.stop_id]) graph[a.stop_id] = [];
+    graph[a.stop_id].push({
+      to: b.stop_id,
+      route: a.route_id
+    });
+
+    if (!stopRoutes[a.stop_id]) stopRoutes[a.stop_id] = new Set();
+    stopRoutes[a.stop_id].add(a.route_id);
+  }
+
+  return { graph, stopRoutes };
+}
+
 
 app.get("/", (req, res) => {
     res.json({message: "Welcome to server"})
 })
 
+// /route and /routes are completely different and serves fully different purposes
+app.get("/route", (req, res) => {
+  const from = req.query.from;
+  const to = req.query.to;
+
+  const { graph } = buildGraph();
+
+  const queue = [[from, []]];
+  const visited = new Set();
+
+  while (queue.length) {
+    const [current, path] = queue.shift();
+    if (current === to) return res.json(path);
+
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    const edges = graph[current] || [];
+    for (const e of edges) {
+      queue.push([e.to, [...path, e]]);
+    }
+  }
+
+  res.json({ error: "No route found" });
+});
+
 app.get("/routes", (req, res) => {
     const routes = db.prepare("SELECT * FROM routes").all();
     res.json(routes);
 });
-
-// app.get("/routes/:id/stops", (req, res) => {
-//     const routeId = req.params.id;
-
-//     const stops = db.prepare(`
-//         SELECT DISTINCT
-//             s.stop_id,
-//             s.stop_name,
-//             s.lat,
-//             s.lon
-//         FROM trips t
-//         JOIN stop_times st ON t.trip_id = st.trip_id
-//         JOIN stops s ON st.stop_id = s.stop_id
-//         WHERE t.route_id = ?
-//         ORDER BY st.stop_sequence
-//     `).all(routeId);
-
-//     res.json(stops);
-// })
 
 app.get("/routes/:id/stops", (req, res) => {
     const routeId = req.params.id;
@@ -134,6 +190,31 @@ app.get("/routes/:id/stops", (req, res) => {
 
     res.json(stops);
 });
+
+app.get("/network", (req, res) => {
+    const rows = db.prepare(`
+        SELECT
+            t.route_id,
+            s.shape_id,
+            s.lat,
+            s.lon,
+            s.seq
+        FROM trips t
+        JOIN shapes s ON t.shape_id = s.shape_id
+        ORDER BY t.route_id, s.shape_id, s.seq
+    `).all();
+
+    const network = {};
+
+    rows.forEach(r => {
+        if (!network[r.route_id]) network[r.route_id] = [];
+        network[r.route_id].push([r.lat, r.lon]);
+    });
+
+    res.json(network);
+});
+
+
 
 loadDatabase().then(() => {
     const PORT = process.env.PORT || 3000;

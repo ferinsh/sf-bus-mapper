@@ -21,9 +21,10 @@
 </head>
 <body>
     <div id="panel">
-    <h3>SF Bus Routes</h3>
-    <select id="routes"></select>
+        <h3>SF Bus Routes</h3>
+        <select id="routes"></select>
     </div>
+    <button onclick="showNetwork()">Show Network</button>
 
     <div id="map"></div>
 
@@ -36,7 +37,29 @@
     maxZoom: 19
     }).addTo(map);
 
+    let networkLines = [];
+
+    function showNetwork() {
+    fetch("/network")
+        .then(res => res.json())
+        .then(data => {
+        networkLines.forEach(l => map.removeLayer(l));
+        networkLines = [];
+
+        Object.values(data).forEach(line => {
+            const poly = L.polyline(line, {
+            color: "gray",
+            weight: 1,
+            opacity: 0.6
+            }).addTo(map);
+
+            networkLines.push(poly);
+        });
+        });
+    }
+
     let routeLine;
+    let stopMarkers = [];
 
     fetch("/routes")
     .then(res => res.json())
@@ -60,13 +83,32 @@
         .then(res => res.json())
         .then(stops => {
             if (routeLine) map.removeLayer(routeLine);
+            stopMarkers.forEach(m => map.removeLayer(m));
+            stopMarkers = [];
 
             const latlngs = stops.map(s => [s.lat, s.lon]);
 
             routeLine = L.polyline(latlngs, { color: "blue" }).addTo(map);
+
+            // Draw stop dots
+            stops.forEach(s => {
+                const marker = L.circleMarker([s.lat, s.lon], {
+                    radius: 5,
+                    color: "black",
+                    fillColor: "yellow",
+                    fillOpacity: 1
+                })
+                    .addTo(map)
+                    .bindPopup(`<b>${s.stop_name}</b>`);
+
+                stopMarkers.push(marker);
+            });
+
             map.fitBounds(routeLine.getBounds());
         });
     }
+
+    
     </script>
 </body>
 </html>
