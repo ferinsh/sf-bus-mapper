@@ -1,0 +1,27 @@
+{
+  "name": "sf-bus-mapper",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ferinsh/sf-bus-mapper.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ferinsh/sf-bus-mapper/issues"
+  },
+  "homepage": "https://github.com/ferinsh/sf-bus-mapper#readme",
+  "dependencies": {
+    "better-sqlite3": "^12.5.0",
+    "cors": "^2.8.5",
+    "csv-parser": "^3.2.0",
+    "express": "^5.2.1"
+  }
+}
