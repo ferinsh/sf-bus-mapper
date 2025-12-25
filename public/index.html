@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SF Bus Mapper</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+    <style>
+        body { margin: 0; }
+        #map { height: 100vh; }
+        #panel {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: white;
+        padding: 10px;
+        z-index: 1000;
+        max-height: 90vh;
+        overflow: auto;
+        width: 250px;
+        }
+    </style>
+</head>
+<body>
+    <div id="panel">
+    <h3>SF Bus Routes</h3>
+    <select id="routes"></select>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <script>
+    const map = L.map("map").setView([37.7749, -122.4194], 12);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19
+    }).addTo(map);
+
+    let routeLine;
+
+    fetch("/routes")
+    .then(res => res.json())
+    .then(routes => {
+        const select = document.getElementById("routes");
+
+        routes.forEach(r => {
+            const option = document.createElement("option");
+            option.value = r.route_id;
+            option.text = r.route_short_name + " " + r.route_long_name;
+            select.appendChild(option);
+        });
+
+        select.onchange = () => {
+            loadRoute(select.value);
+        };
+    });
+
+    function loadRoute(routeId) {
+    fetch(`/routes/${routeId}/stops`)
+        .then(res => res.json())
+        .then(stops => {
+            if (routeLine) map.removeLayer(routeLine);
+
+            const latlngs = stops.map(s => [s.lat, s.lon]);
+
+            routeLine = L.polyline(latlngs, { color: "blue" }).addTo(map);
+            map.fitBounds(routeLine.getBounds());
+        });
+    }
+    </script>
+</body>
+</html>

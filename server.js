@@ -5,6 +5,7 @@ const db = require("./db.js");
 
 const app = express();
 app.use(express.json());
+app.use(express.static("public"))
 
 function loadCSV(file, callback) {
     return new Promise((resolve, reject) => {
@@ -89,24 +90,50 @@ app.get("/routes", (req, res) => {
     res.json(routes);
 });
 
+// app.get("/routes/:id/stops", (req, res) => {
+//     const routeId = req.params.id;
+
+//     const stops = db.prepare(`
+//         SELECT DISTINCT
+//             s.stop_id,
+//             s.stop_name,
+//             s.lat,
+//             s.lon
+//         FROM trips t
+//         JOIN stop_times st ON t.trip_id = st.trip_id
+//         JOIN stops s ON st.stop_id = s.stop_id
+//         WHERE t.route_id = ?
+//         ORDER BY st.stop_sequence
+//     `).all(routeId);
+
+//     res.json(stops);
+// })
+
 app.get("/routes/:id/stops", (req, res) => {
     const routeId = req.params.id;
 
-    const stops = db.prepare(`
-        SELECT DISTINCT
-            s.stop_id,
-            s.stop_name,
-            s.lat,
-            s.lon
+    const trip = db.prepare(`
+        SELECT t.trip_id
         FROM trips t
         JOIN stop_times st ON t.trip_id = st.trip_id
-        JOIN stops s ON st.stop_id = s.stop_id
         WHERE t.route_id = ?
+        GROUP BY t.trip_id
+        ORDER BY COUNT(*) DESC
+        LIMIT 1
+    `).get(routeId);
+
+    if (!trip) return res.json([]);
+
+    const stops = db.prepare(`
+        SELECT s.stop_id, s.stop_name, s.lat, s.lon
+        FROM stop_times st
+        JOIN stops s ON st.stop_id = s.stop_id
+        WHERE st.trip_id = ?
         ORDER BY st.stop_sequence
-    `).all(routeId);
+    `).all(trip.trip_id);
 
     res.json(stops);
-})
+});
 
 loadDatabase().then(() => {
     const PORT = process.env.PORT || 3000;
